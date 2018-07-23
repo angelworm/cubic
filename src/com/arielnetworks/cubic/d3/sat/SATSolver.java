@@ -83,10 +83,6 @@ public class SATSolver {
 
     public static void main(String args[]) throws Exception {
         Board Q = Board.genSQ(3, 3, 3);
-//        Board Q = new Board(4, 2, 1, new int[] {
-//                0, 0, 9, 0,
-//                0, 0, 0, 0,
-//        });
         SATSolver solver = new SATSolver(Q);
 
         solver.run();
@@ -156,7 +152,7 @@ public class SATSolver {
 
     public void run() throws ContradictionException, TimeoutException {
         ISolver solver = SolverFactory.newDefault();
-        solver.setTimeout(60);
+        solver.setTimeout(6000);
 
         solver.newVar(1000);
         solver.setExpectedNumberOfClauses(1000);
@@ -180,13 +176,89 @@ public class SATSolver {
 //                }
 //            }
 //            System.out.println(result.toString());
-            System.out.println(IntStream.of(model).filter(i -> i > 0).mapToObj(Var::new).map(variables::get).collect(Collectors.toList()));
 
-            for (int i = 0; i < model.length; i++) {
-                model[i] = -model[i];
-            }
-            solver.addClause(new VecInt(model));
+//            for (int i = 0; i < model.length; i++) {
+//                model[i] = -model[i];
+//            }
+//            solver.addClause(new VecInt(model));
+            solver.addAllClauses(createPrivAnserConstraints(model));
         }
+    }
+
+    private Info rotX(Board newTarget, Info oldInfo) {
+        Board b = bricks.get(oldInfo.bordIndex).get(oldInfo.rot);
+        Board nb = b.rotX();
+        int nbi = bricks.get(oldInfo.bordIndex).indexOf(nb);
+
+        return new Info(oldInfo.x, newTarget.height - oldInfo.z - nb.height, oldInfo.y, oldInfo.bordIndex, nbi);
+    }
+
+    private Info rotY(Board newTarget, Info oldInfo) {
+        Board b = bricks.get(oldInfo.bordIndex).get(oldInfo.rot);
+        Board nb = b.rotY();
+        int nbi = bricks.get(oldInfo.bordIndex).indexOf(nb);
+
+        return new Info(oldInfo.z, oldInfo.y, newTarget.depth - oldInfo.x - nb.depth, oldInfo.bordIndex, nbi);
+    }
+
+    private Info rotZ(Board newTarget, Info oldInfo) {
+        Board b = bricks.get(oldInfo.bordIndex).get(oldInfo.rot);
+        Board nb = b.rotZ();
+        int nbi = bricks.get(oldInfo.bordIndex).indexOf(nb);
+
+        return new Info(newTarget.width - oldInfo.y - nb.width, oldInfo.x, oldInfo.z, oldInfo.bordIndex, nbi);
+    }
+
+    private Var infoToVar(Info info) {
+        return this.variables.entrySet()
+                .stream()
+                .filter(e -> e.getValue().equals(info))
+                .map(Map.Entry::getKey)
+                .findAny()
+                .orElse(null);
+    }
+
+    private IVec<IVecInt> createPrivAnserConstraints(int[] model) {
+        List<Info> infos = IntStream.of(model)
+                .filter(i -> i > 0)
+                .mapToObj(Var::new)
+                .map(variables::get)
+                .collect(Collectors.toList());
+
+        Set<List<Integer>> found = new HashSet<>();
+        IVec<IVecInt> ret = new Vec<>();
+
+        Board b = this.target;
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                for (int k = 0; k < 4; k++) {
+                    List<Integer> vars = infos.stream().map(this::infoToVar).map(v -> v == null ? null : v.getIndex()).collect(Collectors.toList());
+                    if (vars.stream().noneMatch(Objects::isNull)) {
+                        if (found.add(vars)) {
+                            int[] newModel = new int[model.length];
+                            for (int l = 1; l <= model.length; l++) {
+                                newModel[l - 1] = vars.contains(l) ? -l : l;
+                            }
+                            ret.push(new VecInt(newModel));
+                        }
+                    }
+
+                    b = b.rotX();
+                    Board bx = b;
+                    infos.replaceAll(info -> this.rotX(bx, info));
+                }
+
+                b = b.rotY();
+                Board by = b;
+                infos.replaceAll(info -> this.rotY(by, info));
+            }
+
+            b = b.rotZ();
+            Board bz = b;
+            infos.replaceAll(info -> this.rotZ(bz, info));
+        }
+
+        return ret;
     }
 
     private static class Info {
@@ -217,12 +289,13 @@ public class SATSolver {
             return x == info.x &&
                     y == info.y &&
                     z == info.z &&
-                    bordIndex == info.bordIndex;
+                    bordIndex == info.bordIndex &&
+                    rot == info.rot;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(x, y, z, bordIndex);
+            return Objects.hash(x, y, z, bordIndex, rot);
         }
     }
 
