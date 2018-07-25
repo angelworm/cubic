@@ -6,8 +6,7 @@ import org.sat4j.minisat.SolverFactory;
 import org.sat4j.specs.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import java.util.stream.*;
 
 public class SATSolver {
     private static VarFactory factory = new VarFactory();
@@ -85,11 +84,13 @@ public class SATSolver {
         Board Q = Board.genSQ(3, 3, 3);
         SATSolver solver = new SATSolver(Q);
 
+        long start = System.currentTimeMillis();
+
         solver.run();
 
-        System.out.println(solver.bordToVar);
-        System.out.println(solver.indexToVar);
-        System.out.println(solver.variables);
+        long end = System.currentTimeMillis();
+
+        System.out.println("time:" + (end - start) / 1000.0);
 
         System.exit(0);
     }
@@ -140,9 +141,12 @@ public class SATSolver {
             int[] ints = vars.stream().mapToInt(Var::getIndex).toArray();
             ret.push(new VecInt(ints));
 
+            //System.out.println(Arrays.toString(vars.stream().map(variables::get).toArray()));
+
             for (int i = 0; i < ints.length; i++) {
                 for (int j = i + 1; j < ints.length; j++) {
                     ret.push(new VecInt(new int[]{-ints[i], -ints[j]}));
+                    //System.out.println(Arrays.toString(Stream.of(ints[i], ints[j]).map(Var::new).map(variables::get).toArray()));
                 }
             }
         }
@@ -169,18 +173,15 @@ public class SATSolver {
             System.out.println(String.format("SOLVED(%d): %s", ++solved, Arrays.toString(model)));
 
             Board result = this.target;
-//            for (int i : model) {
-//                if (i > 0) {
-//                    Info info = variables.get(new Var(i));
-//                    result = result.place(info.x, info.y, info.z, this.bricks.get(info.bordIndex).get(info.rot));
-//                }
-//            }
-//            System.out.println(result.toString());
+            for (int i : model) {
+                if (i > 0) {
+                    Info info = variables.get(new Var(i));
+                    result = result.place(info.x, info.y, info.z, this.bricks.get(info.bordIndex).get(info.rot));
+                }
+            }
+            System.out.println(result.toString());
+            System.out.println(Arrays.toString(IntStream.of(model).filter(i -> i > 0).mapToObj(Var::new).map(variables::get).toArray()));
 
-//            for (int i = 0; i < model.length; i++) {
-//                model[i] = -model[i];
-//            }
-//            solver.addClause(new VecInt(model));
             solver.addAllClauses(createPrivAnserConstraints(model));
         }
     }
